@@ -1,0 +1,2 @@
+# kbhackathon
+Utilities to support the Kiss Brigham self-driving car hackathon.
