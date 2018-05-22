@@ -11,6 +11,7 @@
 #define US_PER_S 1000000
 #define RATE 50 //Hz
 #define PULSES_PER_M 2000 //put the real value here
+#define BRAKE_DELAY 50 // in milliseconds
 
 
 // the setup() method runs once, when the sketch starts
@@ -34,9 +35,14 @@ IntervalTimer encTimer;
 volatile int pos  = 0;
 volatile int diff  = 0;
 
+float dist_front = 0.0f;
+float dist_back = 0.0f;
+
+float thr = 0.0f;
+float steer = 0.0f;
+
 // loop timing
 long long prevTime;
-
 
 
 void setup() {
@@ -66,10 +72,12 @@ void readEnc() {
 
 // this creates a byte-wise xor checksum to be sent with the
 // data packet for error checking
-char createChecksum(void* a_p, void* b_p) {
+char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p) {
   char chk = 0x00;
   int a = *(int*)a_p;
   int b = *(int*)b_p;
+  int c = *(int*)c_p;
+  int d = *(int*)d_p;
   chk ^= (char)((a & 0xff000000) >> 24);
   chk ^= (char)((a & 0x00ff0000) >> 16);
   chk ^= (char)((a & 0x0000ff00) >>  8);
@@ -78,26 +86,68 @@ char createChecksum(void* a_p, void* b_p) {
   chk ^= (char)((b & 0x00ff0000) >> 16);
   chk ^= (char)((b & 0x0000ff00) >>  8);
   chk ^= (char)(b & 0x000000ff);
+  chk ^= (char)((c & 0xff000000) >> 24);
+  chk ^= (char)((c & 0x00ff0000) >> 16);
+  chk ^= (char)((c & 0x0000ff00) >>  8);
+  chk ^= (char)(c & 0x000000ff);
+  chk ^= (char)((d & 0xff000000) >> 24);
+  chk ^= (char)((d & 0x00ff0000) >> 16);
+  chk ^= (char)((d & 0x0000ff00) >>  8);
+  chk ^= (char)(d & 0x000000ff);
   return chk;
 }
 
+enum Thr_State{s_forward, s_brake, s_wait, s_rev};
+
 void setServos(float steer, float thr) {
-  Serial.print(thr);
-  Serial.print(", ");
-  Serial.print(steer);
-  Serial.println();
+  static Thr_State state = s_forward;
+  static long rev_time = 0;
   // write() takes angle values between 0 and 180 (stupid)
   steering.write(steer*90 + 90);
-  throttle.write(thr*90 + 90);
+  // we need a state machine for throttle to circumvent
+  // the stupid "braking" feature of the esc
+  switch(state) {
+    case s_forward:
+      if(thr >= 0.0f) {
+        throttle.write(thr*90 + 90);
+      } else {
+        throttle.write(-0.1*90 + 90);
+        rev_time = millis();
+        state = s_brake;
+        Serial.println("brake");
+      }
+      break;
+    case s_brake:
+      if(millis() - rev_time > BRAKE_DELAY) {
+        throttle.write(90);
+        rev_time = millis();
+        state = s_wait;
+        Serial.println("wait");
+      }
+      break;
+    case s_wait:
+      if(millis() - rev_time > BRAKE_DELAY) {
+        state = s_rev;
+        Serial.println("reverse");
+      }
+      break;
+    case s_rev:
+      throttle.write(thr*90 + 90);
+      if(thr > 0.0f) {
+        state = s_forward;
+        Serial.println("forward");
+      }
+      break;
+    default:
+      break;
+  }
 }
 
-enum State{s_idle, s_start, s_reset, s_c1, s_c2, s_c3};
+enum Com_State{s_idle, s_start, s_reset, s_c1, s_c2, s_c3};
 
 void parseCmd(char data) {
-  static State state = s_idle;
+  static Com_State state = s_idle;
   static String val_str;
-  static float thr = 0.0f;
-  static float steer = 0.0f;
   switch(state) {
     case s_idle:
       if(data == '<') state = s_start;
@@ -145,7 +195,7 @@ void parseCmd(char data) {
         val_str += data;
       } else if(data == '>' && val_str.length() > 0) {
         thr = val_str.toFloat();
-        setServos(thr, steer);
+        Serial.println(thr);
         val_str = String("");
         state = s_idle;
       } else {
@@ -170,18 +220,22 @@ void loop() {
   float dist = (float)pos_copy/PULSES_PER_M;
   float vel = (float)diff_copy/PULSES_PER_M*RATE;
   // create a checksum by doing a byte-wise xor of the data
-  char checksum = createChecksum(&dist, &vel);
-//  Serial.print("[");
-//  Serial.print(dist, 3);
-//  Serial.print(",");
-//  Serial.print(vel, 3);
-//  Serial.print(",");
-//  if(checksum < 100) Serial.print("0");
-//  if(checksum < 10) Serial.print("0");
-//  Serial.print((int)checksum);
-//  //printf("%03d", checksum);
-//  Serial.print("]");
-//  Serial.println();
+  char checksum = createChecksum(&dist, &vel, &dist_front, &dist_back);
+  Serial.print("[");
+  Serial.print(dist, 3);
+  Serial.print(",");
+  Serial.print(vel, 3);
+  Serial.print(",");
+  Serial.print(dist_front, 3);
+  Serial.print(",");
+  Serial.print(dist_back, 3);
+  Serial.print(",");
+  if(checksum < 100) Serial.print("0");
+  if(checksum < 10) Serial.print("0");
+  Serial.print((int)checksum);
+  //printf("%03d", checksum);
+  Serial.print("]");
+  Serial.println();
   //delay(100);
   if(diff_copy != 0) {
     digitalWrite(LED_PIN, HIGH);   // set the LED on
@@ -194,6 +248,8 @@ void loop() {
   while (Serial.available()) {
     parseCmd(Serial.read());
   }
+
+  setServos(steer, thr);
 
   // calculate how long all of our stuff took
   long long now = (long long)micros();
