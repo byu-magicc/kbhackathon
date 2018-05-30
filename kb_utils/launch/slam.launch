@@ -1,0 +1,49 @@
+<launch>
+
+
+
+
+  <node name="base_tf" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 1 camera_link base_link 100"/>
+    <!--<node name="map" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 1 base_link map 100"/>-->
+    <!-- -->
+  <!--<node name="obstacle_avoidance" pkg="obstacle_avoidance" type="obstacle_avoidance"/>-->
+
+    <!--Launch Realsense and RTAB Map-->
+  <include file="$(find kb_utils)/launch/realsense.launch"/>
+  <include file="$(find kb_utils)/launch/rtab.launch"/>
+
+
+    <!-- VO -->
+    <!-- <group if="$(arg run_rgbd)">
+      <include file="$(find relative_nav)/launch/rgbd.launch"/>
+      <include file="$(find demo_rgbd)/demo_rgbd.launch"/>
+      <node name="vo_relay" pkg="vo_relay" type="vo_relay_node">
+        <remap from="global_vo" to="cam_to_init"/>
+      </node>
+    </group> -->
+
+    <!--Estimation-->
+    <!--<node name="start_trigger" pkg="rmekf" type="start_trigger.py"/>-->
+    <!--<node name="rmekf"         pkg="rmekf" type="rmekf_node" output="screen">-->
+    <!--<rosparam command="load" file="$(find rmekf)/params/estimator.yaml"/>-->
+    <!--<remap from="altimeter" to="sonar"/>-->
+    <!--</node>-->
+
+    <!-- Velocity Command -->
+    <!--<node name="velocity_command_joy" pkg="rosflight_joy" type="velocity_command_joy">-->
+    <!--<remap from="velocity_command" to="high_level_command"/>-->
+    <!--</node>-->
+
+   <!-- MoCap -->
+   <!--<node name="mocap" pkg="vrpn_client_ros" type="vrpn_client_node">-->
+   <!--<param name="server" value="192.168.0.103"/>-->
+   <!--<param name="refresh_tracker_frequency" value="10"/>-->
+   <!--</node>-->
+   <!--<node name="mocap_NED_transform" pkg="vrpn_transform" type="vrpn_transform_node"/>-->
+
+    <!--Record-->
+     <node name ="record" pkg="rosbag" type ="record" args="-O $(arg name)
+         camera/aligned_depth_to_color/image_raw/compressedDepth
+         camera/color/image_rect_color/compressed camera/color/camera_info 
+         camera/depth/camera_info /tf /tf_static" output="screen"/>
+  </launch>
