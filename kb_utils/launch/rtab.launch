@@ -17,7 +17,7 @@
   <arg name="stereo"          default="false"/>
 
   <!-- Choose visualization -->
-  <arg name="rtabmapviz"              default="true" />
+  <arg name="rtabmapviz"              default="false" />
   <arg name="rviz"                    default="false" />
 
   <!-- Localization-only mode -->
@@ -41,7 +41,7 @@
   <arg name="database_path"           default="~/.ros/rtabmap.db"/>
   <arg name="queue_size"              default="10"/>
   <arg name="wait_for_transform"      default="0.2"/>
-  <arg name="args"                    default="--delete_db_on_start"/>      <!-- delete_db_on_start, udebug -->
+  <arg name="args"                    default=""/>      <!-- delete_db_on_start, udebug -->
   <arg name="rtabmap_args"            default="$(arg args)"/>   <!-- deprecated, use "args" argument -->
   <arg name="launch_prefix"           default=""/>              <!-- for debugging purpose, it fills launch-prefix tag of the nodes -->
   <arg name="output"                  default="screen"/>        <!-- Control node output (screen or log) -->
