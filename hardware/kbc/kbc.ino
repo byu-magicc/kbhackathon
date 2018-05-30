@@ -12,7 +12,43 @@
 #define RATE 50 //Hz
 #define PULSES_PER_M 2000 //put the real value here
 #define BRAKE_DELAY 50 // in milliseconds
-#define BACK_SONAR_PWM_PIN 9
+#define BACK_SONAR_PWM_PIN 
+
+#define RC_THR_PIN 7
+#define RC_STR_PIN 8
+
+
+volatile int last_thr_pwm_rise;
+volatile int thr_pwm;
+volatile int last_str_pwm_rise;
+volatile int str_pwm;
+
+void throttle_PWM_isr()
+{
+  // If the signal is rising, then capture the time
+  if (digitalRead(RC_THR_PIN) == HIGH)
+  {
+    last_thr_pwm_rise = micros();
+  }
+  else
+  {
+    thr_pwm = micros() - last_thr_pwm_rise;
+  }
+}
+
+
+void steering_PWM_isr()
+{
+  // If the signal is rising, then capture the time
+  if (digitalRead(RC_STR_PIN) == HIGH)
+  {
+    last_str_pwm_rise = micros();
+  }
+  else
+  {
+    str_pwm = micros() - last_str_pwm_rise;
+  }
+}
 
 
 // the setup() method runs once, when the sketch starts
