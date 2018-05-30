@@ -12,7 +12,7 @@
 #define RATE 50 //Hz
 #define PULSES_PER_M 2000 //put the real value here
 #define BRAKE_DELAY 50 // in milliseconds
-#define BACK_SONAR_PWM_PIN 
+#define BACK_SONAR_PWM_PIN 9
 
 #define RC_THR_PIN 7
 #define RC_STR_PIN 8
@@ -96,6 +96,10 @@ void setup() {
   steering.write(90);
   throttle.write(90);
   prevTime = (long long)micros();
+
+  // Configure the RC inputs
+  attachInterrupt(digitalPinToInterrupt(RC_THR_PIN), throttle_PWM_isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(RC_STR_PIN), steering_PWM_isr, CHANGE);
 }
 
 // callback to save the current encoder values
@@ -258,10 +262,17 @@ float readSonar()
 void loop() {
   int pos_copy;
   int diff_copy;
+  int rc_thr_copy;
+  int rc_str_copy;
+
   noInterrupts();
   pos_copy = pos;
   diff_copy = diff;
+  rc_thr_copy = thr_pwm;
+  rc_str_copy = str_pwm;
   interrupts();
+
+
   // convert the pulses into SI units (m and m/s)
   float dist = (float)pos_copy/PULSES_PER_M;
   float vel = (float)diff_copy/PULSES_PER_M*RATE;
