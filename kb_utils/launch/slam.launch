@@ -41,9 +41,10 @@
    <!--</node>-->
    <!--<node name="mocap_NED_transform" pkg="vrpn_transform" type="vrpn_transform_node"/>-->
 
-    <!--Record-->
+    <!--Record-
      <node name ="record" pkg="rosbag" type ="record" args="-O $(arg name)
          camera/aligned_depth_to_color/image_raw/compressedDepth
-         camera/color/image_rect_color/compressed camera/color/camera_info 
+         camera/color/image_rect_color/compressed camera/color/camera_info
          camera/depth/camera_info /tf /tf_static" output="screen"/>
+    -->
   </launch>
