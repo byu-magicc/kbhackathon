@@ -12,6 +12,43 @@
 #define RATE 50 //Hz
 #define PULSES_PER_M 2000 //put the real value here
 #define BRAKE_DELAY 50 // in milliseconds
+#define BACK_SONAR_PWM_PIN 9
+
+#define RC_THR_PIN 7
+#define RC_STR_PIN 8
+
+
+volatile int last_thr_pwm_rise;
+volatile int thr_pwm;
+volatile int last_str_pwm_rise;
+volatile int str_pwm;
+
+void throttle_PWM_isr()
+{
+  // If the signal is rising, then capture the time
+  if (digitalRead(RC_THR_PIN) == HIGH)
+  {
+    last_thr_pwm_rise = micros();
+  }
+  else
+  {
+    thr_pwm = micros() - last_thr_pwm_rise;
+  }
+}
+
+
+void steering_PWM_isr()
+{
+  // If the signal is rising, then capture the time
+  if (digitalRead(RC_STR_PIN) == HIGH)
+  {
+    last_str_pwm_rise = micros();
+  }
+  else
+  {
+    str_pwm = micros() - last_str_pwm_rise;
+  }
+}
 
 
 // the setup() method runs once, when the sketch starts
@@ -36,7 +73,6 @@ volatile int pos  = 0;
 volatile int diff  = 0;
 
 float dist_front = 0.0f;
-float dist_back = 0.0f;
 
 float thr = 0.0f;
 float steer = 0.0f;
@@ -51,6 +87,7 @@ void setup() {
 //  pinMode(STEER_PIN, OUTPUT);
 //  pinMode(THROTTLE_PIN, OUTPUT);
   Serial.begin(115200);
+  Serial2.begin(9600); // back sonar
   encTimer.begin(readEnc, US_PER_S/RATE);  // Read the encoder at the specified rate
   // assign servo pins
   steering.attach(STEER_PIN);
@@ -59,6 +96,10 @@ void setup() {
   steering.write(90);
   throttle.write(90);
   prevTime = (long long)micros();
+
+  // Configure the RC inputs
+  attachInterrupt(digitalPinToInterrupt(RC_THR_PIN), throttle_PWM_isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(RC_STR_PIN), steering_PWM_isr, CHANGE);
 }
 
 // callback to save the current encoder values
@@ -209,16 +250,33 @@ void parseCmd(char data) {
   
 }
 
+float readSonar()
+{
+  pinMode(BACK_SONAR_PWM_PIN,INPUT);
+  float pulse = pulseIn(BACK_SONAR_PWM_PIN,HIGH);
+  float inches = pulse/147; // 147 microseconds per inch
+  float dist = inches*0.0254; // convert to meters
+  return dist;
+}
+
 void loop() {
   int pos_copy;
   int diff_copy;
+  int rc_thr_copy;
+  int rc_str_copy;
+
   noInterrupts();
   pos_copy = pos;
   diff_copy = diff;
+  rc_thr_copy = thr_pwm;
+  rc_str_copy = str_pwm;
   interrupts();
+
+
   // convert the pulses into SI units (m and m/s)
   float dist = (float)pos_copy/PULSES_PER_M;
   float vel = (float)diff_copy/PULSES_PER_M*RATE;
+  float dist_back = readSonar();
   // create a checksum by doing a byte-wise xor of the data
   char checksum = createChecksum(&dist, &vel, &dist_front, &dist_back);
   Serial.print("[");
