@@ -20,7 +20,11 @@ class KB_Driver(object):
         self.ser = serial.Serial(port)
         self.enc_pub = rospy.Publisher("encoder", Encoder, queue_size=1)
         self.son_pub = rospy.Publisher("sonar", Sonar, queue_size=1)
+        self.cmd_sub = rospy.Subscriber("command", Command, self.send_command)
 
+    def send_command(self, cmd_msg):
+        self.ser.write("<c:{},{}>".format(cmd_msg.steer, cmd_msg.throttle))
+        # print("<c:{},{}>".format(cmd_msg.steer, cmd_msg.throttle))
 
     def pub_data(self, data):
         now = rospy.Time().now()
@@ -35,8 +39,7 @@ class KB_Driver(object):
 
         son_msg.header.stamp = now
         son_msg.header.frame_id = 'global'
-        son_msg.dist_front = float(data[2])
-        son_msg.dist_back = float(data[3])
+        son_msg.dist_back = float(data[2])
         self.son_pub.publish(son_msg)
 
     def clean_shutdown(self):
@@ -46,12 +49,12 @@ class KB_Driver(object):
     def run(self):
         while not rospy.is_shutdown():
             line = self.ser.readline()
-            print(line)
+            # print(line)
             try:
                 a = line.index('[')+1
                 b = line.index(']')
                 data = line[a:b].split(',')
-                if len(data) != 5:
+                if len(data) != 6:
                     raise ValueError
                 self.pub_data(data[:-1])
             except ValueError:
