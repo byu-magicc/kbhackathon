@@ -14,8 +14,12 @@
 #define BRAKE_DELAY 50 // in milliseconds
 #define BACK_SONAR_PWM_PIN 9
 
-#define RC_THR_PIN 7
-#define RC_STR_PIN 8
+#define SAFETY_DEADZONE_MIN 1450
+#define SAFETY_DEADZONE_MAX 1550
+#define SAFETY_DELAY 2000
+
+#define RC_THR_PIN 8
+#define RC_STR_PIN 7
 
 
 volatile int last_thr_pwm_rise;
@@ -84,10 +88,10 @@ long long prevTime;
 void setup() {
   // initialize the digital pin as an output.
   pinMode(LED_PIN, OUTPUT);
+  pinMode(BACK_SONAR_PWM_PIN,INPUT);
 //  pinMode(STEER_PIN, OUTPUT);
 //  pinMode(THROTTLE_PIN, OUTPUT);
   Serial.begin(115200);
-  Serial2.begin(9600); // back sonar
   encTimer.begin(readEnc, US_PER_S/RATE);  // Read the encoder at the specified rate
   // assign servo pins
   steering.attach(STEER_PIN);
@@ -113,12 +117,13 @@ void readEnc() {
 
 // this creates a byte-wise xor checksum to be sent with the
 // data packet for error checking
-char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p) {
+char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p) {
   char chk = 0x00;
   int a = *(int*)a_p;
   int b = *(int*)b_p;
   int c = *(int*)c_p;
   int d = *(int*)d_p;
+  int e = *(int*)e_p;
   chk ^= (char)((a & 0xff000000) >> 24);
   chk ^= (char)((a & 0x00ff0000) >> 16);
   chk ^= (char)((a & 0x0000ff00) >>  8);
@@ -135,7 +140,30 @@ char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p) {
   chk ^= (char)((d & 0x00ff0000) >> 16);
   chk ^= (char)((d & 0x0000ff00) >>  8);
   chk ^= (char)(d & 0x000000ff);
+  chk ^= (char)((e & 0xff000000) >> 24);
+  chk ^= (char)((e & 0x00ff0000) >> 16);
+  chk ^= (char)((e & 0x0000ff00) >>  8);
+  chk ^= (char)(e & 0x000000ff);
   return chk;
+}
+
+bool check_safety_override(int rc_thr, int rc_str) {
+  static long override_time = 0;
+  long now = millis();
+  if(override_time == 0) {
+    override_time = now;
+  }
+  bool override = true;
+  // if no safety pilot connected or if input from pilot
+  // or if we have received input recently
+  if(rc_thr == 0 || rc_str == 0 ||
+     rc_thr < SAFETY_DEADZONE_MIN || rc_thr > SAFETY_DEADZONE_MAX ||
+     rc_str < SAFETY_DEADZONE_MIN || rc_str > SAFETY_DEADZONE_MAX) {
+    override_time = now;
+  } else if(now - override_time > SAFETY_DELAY) {
+    override = false;
+  }
+  return override;
 }
 
 enum Thr_State{s_forward, s_brake, s_wait, s_rev};
@@ -236,7 +264,7 @@ void parseCmd(char data) {
         val_str += data;
       } else if(data == '>' && val_str.length() > 0) {
         thr = val_str.toFloat();
-        Serial.println(thr);
+        //Serial.println(thr);
         val_str = String("");
         state = s_idle;
       } else {
@@ -252,7 +280,6 @@ void parseCmd(char data) {
 
 float readSonar()
 {
-  pinMode(BACK_SONAR_PWM_PIN,INPUT);
   float pulse = pulseIn(BACK_SONAR_PWM_PIN,HIGH);
   float inches = pulse/147; // 147 microseconds per inch
   float dist = inches*0.0254; // convert to meters
@@ -276,17 +303,20 @@ void loop() {
   // convert the pulses into SI units (m and m/s)
   float dist = (float)pos_copy/PULSES_PER_M;
   float vel = (float)diff_copy/PULSES_PER_M*RATE;
-  float dist_back = readSonar();
+  //float dist_back = readSonar();
+  float dist_back = 0.0f;
   // create a checksum by doing a byte-wise xor of the data
-  char checksum = createChecksum(&dist, &vel, &dist_front, &dist_back);
+  char checksum = createChecksum(&dist, &vel, &dist_back, &rc_thr_copy, &rc_str_copy);
   Serial.print("[");
   Serial.print(dist, 3);
   Serial.print(",");
   Serial.print(vel, 3);
   Serial.print(",");
-  Serial.print(dist_front, 3);
-  Serial.print(",");
   Serial.print(dist_back, 3);
+  Serial.print(",");
+  Serial.print(rc_thr_copy);
+  Serial.print(",");
+  Serial.print(rc_str_copy);
   Serial.print(",");
   if(checksum < 100) Serial.print("0");
   if(checksum < 10) Serial.print("0");
@@ -307,7 +337,17 @@ void loop() {
     parseCmd(Serial.read());
   }
 
-  setServos(steer, thr);
+  // Check for safety pilot input
+  // if no input act normal
+  // else pass through pilot commands and don't go back to normal until
+  // no input for a couple seconds
+  if(check_safety_override(rc_thr_copy, rc_str_copy)) {
+    throttle.write((rc_thr_copy - 1500)/500.*90 + 90);
+    steering.write((rc_str_copy - 1500)/500.*90 + 90);
+    digitalWrite(LED_PIN, HIGH);   // set the LED on solid to indicate override
+  } else {
+    setServos(steer, thr);
+  }
 
   // calculate how long all of our stuff took
   long long now = (long long)micros();
