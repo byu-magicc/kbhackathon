@@ -20,6 +20,8 @@
 #define SAFETY_DEADZONE_MAX 1550
 #define SAFETY_DELAY 2000
 
+#define MAX_VEL 3.0 //m/s
+
 #define RC_THR_PIN 8
 #define RC_STR_PIN 7
 
@@ -296,8 +298,6 @@ void parseCmd(char data) {
     default:
       state = s_idle;
   }
-  
-  
 }
 
 void loop() {
@@ -310,6 +310,9 @@ void loop() {
 
   noInterrupts();
   pos_copy = pos;
+  if(pos == 0) {
+    diff = 0;
+  }
   diff_copy = diff;
   rc_thr_copy = thr_pwm;
   rc_str_copy = str_pwm;
@@ -371,6 +374,12 @@ void loop() {
     if(toggle1) toggle2 = !toggle2;
   } else {
     setServos(steer, thr);
+  }
+
+  // This is the Governator. Do not disable, or you will be Terminated!
+  if(abs(vel) > MAX_VEL) {
+    // slow down fool!
+    throttle.write(90);
   }
 
   // calculate how long all of our stuff took
