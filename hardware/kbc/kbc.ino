@@ -10,7 +10,7 @@
 #define THROTTLE_PIN 6
 #define US_PER_S 1000000
 #define RATE 50 //Hz
-#define PULSES_PER_M 2000 //put the real value here
+#define PULSES_PER_M 10180 //10180
 #define BRAKE_DELAY 50 // in milliseconds
 #define BACK_SONAR_PIN 9
 
@@ -356,7 +356,8 @@ void loop() {
   // else pass through pilot commands and don't go back to normal until
   // no input for a couple seconds
   if(check_safety_override(rc_thr_copy, rc_str_copy)) {
-    if(rc_thr_copy == 0 || rc_str_copy == 0) {
+    if(rc_thr_copy < SERVO_MIN || rc_str_copy == 0 || 
+       ) {
       throttle.write(90);
       steering.write(90);
     } else {
