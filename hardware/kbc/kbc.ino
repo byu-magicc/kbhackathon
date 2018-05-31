@@ -14,6 +14,8 @@
 #define BRAKE_DELAY 50 // in milliseconds
 #define BACK_SONAR_PIN 9
 
+#define SERVO_MIN 850
+#define SERVO_MAX 2150
 #define SAFETY_DEADZONE_MIN 1450
 #define SAFETY_DEADZONE_MAX 1550
 #define SAFETY_DELAY 2000
@@ -356,8 +358,8 @@ void loop() {
   // else pass through pilot commands and don't go back to normal until
   // no input for a couple seconds
   if(check_safety_override(rc_thr_copy, rc_str_copy)) {
-    if(rc_thr_copy < SERVO_MIN || rc_str_copy == 0 || 
-       ) {
+    if(rc_thr_copy < SERVO_MIN || rc_thr_copy > SERVO_MAX || 
+       rc_str_copy < SERVO_MIN || rc_str_copy > SERVO_MAX) {
       throttle.write(90);
       steering.write(90);
     } else {
