@@ -303,6 +303,8 @@ void loop() {
   int diff_copy;
   int rc_thr_copy;
   int rc_str_copy;
+  static bool toggle1 = false;
+  static bool toggle2 = false;
 
   noInterrupts();
   pos_copy = pos;
@@ -361,7 +363,9 @@ void loop() {
       throttle.write((rc_thr_copy - 1500)/500.*90 + 90);
       steering.write((rc_str_copy - 1500)/500.*90 + 90);
     }
-    digitalWrite(LED_PIN, HIGH);   // set the LED on solid to indicate override
+    digitalWrite(LED_PIN, toggle2);   // set the LED on solid to indicate override
+    toggle1 = !toggle1;
+    if(toggle1) toggle2 = !toggle2;
   } else {
     setServos(steer, thr);
   }
