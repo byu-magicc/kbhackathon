@@ -342,8 +342,13 @@ void loop() {
   // else pass through pilot commands and don't go back to normal until
   // no input for a couple seconds
   if(check_safety_override(rc_thr_copy, rc_str_copy)) {
-    throttle.write((rc_thr_copy - 1500)/500.*90 + 90);
-    steering.write((rc_str_copy - 1500)/500.*90 + 90);
+    if(rc_thr_copy == 0 || rc_str_copy == 0) {
+      throttle.write(90);
+      steering.write(90);
+    } else {
+      throttle.write((rc_thr_copy - 1500)/500.*90 + 90);
+      steering.write((rc_str_copy - 1500)/500.*90 + 90);
+    }
     digitalWrite(LED_PIN, HIGH);   // set the LED on solid to indicate override
   } else {
     setServos(steer, thr);
