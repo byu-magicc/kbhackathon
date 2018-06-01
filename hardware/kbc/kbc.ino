@@ -333,9 +333,9 @@ void loop() {
   Serial.print(",");
   Serial.print(dist_back, 3);
   Serial.print(",");
-  Serial.print(rc_thr_copy);
-  Serial.print(",");
   Serial.print(rc_str_copy);
+  Serial.print(",");
+  Serial.print(rc_thr_copy);
   Serial.print(",");
   if(checksum < 100) Serial.print("0");
   if(checksum < 10) Serial.print("0");
