@@ -9,6 +9,7 @@ import serial
 from kb_utils.msg import Command
 from kb_utils.msg import Encoder
 from kb_utils.msg import Sonar
+from kb_utils.srv import ResetEncoder
 
 
 class KB_Driver(object):
@@ -21,6 +22,11 @@ class KB_Driver(object):
         self.enc_pub = rospy.Publisher("encoder", Encoder, queue_size=1)
         self.son_pub = rospy.Publisher("sonar", Sonar, queue_size=1)
         self.cmd_sub = rospy.Subscriber("command", Command, self.send_command)
+        self.enc_srv = rospy.Service('reset_encoder', ResetEncoder, self.reset_encoder)
+
+    def reset_encoder(self, req):
+        self.ser.write("<r>")
+        return 0
 
     def send_command(self, cmd_msg):
         self.ser.write("<c:{},{}>".format(cmd_msg.steer, cmd_msg.throttle))

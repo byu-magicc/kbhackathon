@@ -10,13 +10,17 @@
 #define THROTTLE_PIN 6
 #define US_PER_S 1000000
 #define RATE 50 //Hz
-#define PULSES_PER_M 2000 //put the real value here
+#define PULSES_PER_M 10180 //10180
 #define BRAKE_DELAY 50 // in milliseconds
 #define BACK_SONAR_PIN 9
 
+#define SERVO_MIN 850
+#define SERVO_MAX 2150
 #define SAFETY_DEADZONE_MIN 1450
 #define SAFETY_DEADZONE_MAX 1550
 #define SAFETY_DELAY 2000
+
+#define MAX_VEL 3.0 //m/s
 
 #define RC_THR_PIN 8
 #define RC_STR_PIN 7
@@ -294,8 +298,6 @@ void parseCmd(char data) {
     default:
       state = s_idle;
   }
-  
-  
 }
 
 void loop() {
@@ -308,6 +310,9 @@ void loop() {
 
   noInterrupts();
   pos_copy = pos;
+  if(pos == 0) {
+    diff = 0;
+  }
   diff_copy = diff;
   rc_thr_copy = thr_pwm;
   rc_str_copy = str_pwm;
@@ -328,9 +333,9 @@ void loop() {
   Serial.print(",");
   Serial.print(dist_back, 3);
   Serial.print(",");
-  Serial.print(rc_thr_copy);
-  Serial.print(",");
   Serial.print(rc_str_copy);
+  Serial.print(",");
+  Serial.print(rc_thr_copy);
   Serial.print(",");
   if(checksum < 100) Serial.print("0");
   if(checksum < 10) Serial.print("0");
@@ -356,7 +361,8 @@ void loop() {
   // else pass through pilot commands and don't go back to normal until
   // no input for a couple seconds
   if(check_safety_override(rc_thr_copy, rc_str_copy)) {
-    if(rc_thr_copy == 0 || rc_str_copy == 0) {
+    if(rc_thr_copy < SERVO_MIN || rc_thr_copy > SERVO_MAX || 
+       rc_str_copy < SERVO_MIN || rc_str_copy > SERVO_MAX) {
       throttle.write(90);
       steering.write(90);
     } else {
@@ -368,6 +374,12 @@ void loop() {
     if(toggle1) toggle2 = !toggle2;
   } else {
     setServos(steer, thr);
+  }
+
+  // This is the Governator. Do not disable, or you will be Terminated!
+  if(abs(vel) > MAX_VEL) {
+    // slow down fool!
+    throttle.write(90);
   }
 
   // calculate how long all of our stuff took
