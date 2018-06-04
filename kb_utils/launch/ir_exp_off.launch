@@ -1,0 +1,6 @@
+<launch>
+<!--turn off Depth auto exposure-->
+  <node pkg="dynamic_reconfigure" type="dynparam" name="set_ir_autoexposure_off"
+        args="set camera/realsense2_camera_manager rs415_depth_enable_auto_exposure 0">
+  </node>
+</launch>

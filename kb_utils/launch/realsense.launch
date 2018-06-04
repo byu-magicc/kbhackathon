@@ -205,7 +205,23 @@ Processing enabled by this node:
     </group>
     <node pkg="kb_utils" type="grayscaler.py" name="grayscaler"/>
 
-
   </group>
+  <!-- reset depth auto exposure (this fixes the bug of IR auto exposure not working on launch)-->
+  <!-- to include the timed_roslaunch, it must be downloaded from source into the workspace
+      git clone https://github.com/MoriKen254/timed_roslaunch.git -->
+  <include file="$(find timed_roslaunch)/launch/timed_roslaunch.launch">
+    <arg name="time" value="7" />
+    <arg name="pkg" value="kb_utils" />
+    <arg name="file" value="ir_exp_off.launch" />
+    <arg name="node_name" value="depth_auto_exp_off" />
+  </include>
+
+  <include file="$(find timed_roslaunch)/launch/timed_roslaunch.launch">
+    <arg name="time" value="9" />
+    <arg name="pkg" value="kb_utils" />
+    <arg name="file" value="ir_exp_on.launch" />
+    <arg name="node_name" value="depth_auto_exp_on" />
+  </include>
+
 
 </launch>
