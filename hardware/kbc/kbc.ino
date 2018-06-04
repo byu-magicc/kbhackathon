@@ -16,6 +16,7 @@
 
 #define SERVO_MIN 850
 #define SERVO_MAX 2150
+#define SERVO_RANGE 45    //this limits steering range on the servo so it doesn't bind
 #define SAFETY_DEADZONE_MIN 1450
 #define SAFETY_DEADZONE_MAX 1550
 #define SAFETY_DELAY 2000
@@ -32,6 +33,12 @@ volatile int last_str_pwm_rise;
 volatile int str_pwm;
 volatile int last_sonar_pwm_rise;
 volatile int sonar_pwm;
+
+float sat(float val, float max, float min) {
+  if(val > max) val = max;
+  if(val < min) val = min;
+  return val;
+}
 
 void throttle_PWM_isr()
 {
@@ -196,7 +203,7 @@ void setServos(float steer, float thr) {
   static Thr_State state = s_forward;
   static long rev_time = 0;
   // write() takes angle values between 0 and 180 (stupid)
-  steering.write(steer*90 + 90);
+  steering.write(steer*SERVO_RANGE + 90);
   // we need a state machine for throttle to circumvent
   // the stupid "braking" feature of the esc
   switch(state) {
@@ -276,7 +283,7 @@ void parseCmd(char data) {
       if(data >= '-' && data <= '9' && data != '/') {
         val_str += data;
       } else if(data == ',' && val_str.length() > 0) {
-        steer = val_str.toFloat();
+        steer = sat(val_str.toFloat(), 1.0f, -1.0f);
         val_str = String("");
         state = s_c3;
       } else {
@@ -287,7 +294,7 @@ void parseCmd(char data) {
       if(data >= '-' && data <= '9' && data != '/') {
         val_str += data;
       } else if(data == '>' && val_str.length() > 0) {
-        thr = val_str.toFloat();
+        thr = sat(val_str.toFloat(), 1.0f, -1.0f);
         //Serial.println(thr);
         val_str = String("");
         state = s_idle;
@@ -366,8 +373,8 @@ void loop() {
       throttle.write(90);
       steering.write(90);
     } else {
-      throttle.write((rc_thr_copy - 1500)/500.*90 + 90);
-      steering.write((rc_str_copy - 1500)/500.*90 + 90);
+      throttle.write((rc_thr_copy - 1500)/500.*SERVO_RANGE + 90);
+      steering.write((rc_str_copy - 1500)/500.*SERVO_RANGE + 90);
     }
     digitalWrite(LED_PIN, toggle2);   // set the LED on solid to indicate override
     toggle1 = !toggle1;
