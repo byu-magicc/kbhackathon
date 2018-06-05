@@ -84,10 +84,6 @@ void sonar_PWM_isr()
   }
 }
 
-
-// the setup() method runs once, when the sketch starts
-
-
 // Change these pin numbers to the pins connected to your encoder.
 //   Best Performance: both pins have interrupt capability
 //   Good Performance: only the first pin has interrupt capability
@@ -118,13 +114,20 @@ long last_safety_time;
 long long prevTime;
 
 
+// Choose the UART or USB device to use:
+//   - USB   --> Serial
+//   - UARTx --> Serialx
+auto serial = Serial1;
+
+
 void setup() {
+  
   // initialize the digital pin as an output.
   pinMode(LED_PIN, OUTPUT);
 //  pinMode(BACK_SONAR_PIN,INPUT);
 //  pinMode(STEER_PIN, OUTPUT);
 //  pinMode(THROTTLE_PIN, OUTPUT);
-  Serial.begin(115200);
+  serial.begin(115200);
   encTimer.begin(readEnc, US_PER_S/RATE);  // Read the encoder at the specified rate
   // assign servo pins
   steering.attach(STEER_PIN);
@@ -234,7 +237,7 @@ void setServos(float steer, float thr) {
         throttle.write(-0.1*90 + 90);
         rev_time = millis();
         state = s_brake;
-        Serial.println("brake");
+        serial.println("brake");
       }
       break;
     case s_brake:
@@ -242,20 +245,20 @@ void setServos(float steer, float thr) {
         throttle.write(90);
         rev_time = millis();
         state = s_wait;
-        Serial.println("wait");
+        serial.println("wait");
       }
       break;
     case s_wait:
       if(millis() - rev_time > BRAKE_DELAY) {
         state = s_rev;
-        Serial.println("reverse");
+        serial.println("reverse");
       }
       break;
     case s_rev:
       throttle.write(thr*90 + 90);
       if(thr > 0.0f) {
         state = s_forward;
-        Serial.println("forward");
+        serial.println("forward");
       }
       break;
     default:
@@ -315,7 +318,7 @@ void parseCmd(char data) {
         val_str += data;
       } else if(data == '>' && val_str.length() > 0) {
         thr = sat(val_str.toFloat(), 1.0f, -1.0f);
-        //Serial.println(thr);
+        //serial.println(thr);
         val_str = String("");
         last_command_time = millis();
         state = s_idle;
@@ -357,25 +360,25 @@ void loop() {
   // create a checksum by doing a byte-wise xor of the data
   bool rc_override_copy = rc_override;
   char checksum = createChecksum(&dist, &vel, &dist_back, &rc_thr_copy, &rc_str_copy, &rc_override_copy);
-  Serial.print("[");
-  Serial.print(dist, 3);
-  Serial.print(",");
-  Serial.print(vel, 3);
-  Serial.print(",");
-  Serial.print(dist_back, 3);
-  Serial.print(",");
-  Serial.print(rc_str_copy);
-  Serial.print(",");
-  Serial.print(rc_thr_copy);
-  Serial.print(",");
-  Serial.print(rc_override_copy ? "1" : "0");
-  Serial.print(",");
-  if(checksum < 100) Serial.print("0");
-  if(checksum < 10) Serial.print("0");
-  Serial.print((int)checksum);
+  serial.print("[");
+  serial.print(dist, 3);
+  serial.print(",");
+  serial.print(vel, 3);
+  serial.print(",");
+  serial.print(dist_back, 3);
+  serial.print(",");
+  serial.print(rc_str_copy);
+  serial.print(",");
+  serial.print(rc_thr_copy);
+  serial.print(",");
+  serial.print(rc_override_copy ? "1" : "0");
+  serial.print(",");
+  if(checksum < 100) serial.print("0");
+  if(checksum < 10) serial.print("0");
+  serial.print((int)checksum);
   //printf("%03d", checksum);
-  Serial.print("]");
-  Serial.println();
+  serial.print("]");
+  serial.println();
   //delay(100);
   if(diff_copy != 0) {
     digitalWrite(LED_PIN, HIGH);   // set the LED on
@@ -385,8 +388,8 @@ void loop() {
 
   // if a character is sent from the serial monitor,
   // reset both back to zero.
-  while (Serial.available()) {
-    parseCmd(Serial.read());
+  while (serial.available()) {
+    parseCmd(serial.read());
   }
 
   // Check for safety pilot input
@@ -424,14 +427,14 @@ void loop() {
   // calculate how long all of our stuff took
   long long now = (long long)micros();
   long long dur = now - prevTime;
-  //Serial.print((int)dur);
+  //serial.print((int)dur);
 
   // if the loop took less time than our desired period,
   // sleep until the next iteration should happen
   // this could be more graceful, but I don't care right now
   if(dur > 0 && dur < US_PER_S/RATE) {
     delayMicroseconds(US_PER_S/RATE - dur);
-    //Serial.print("sleeping");
+    //serial.print("sleeping");
   }
   prevTime = (long long)micros();
 }
