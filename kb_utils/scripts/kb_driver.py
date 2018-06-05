@@ -53,8 +53,8 @@ class KB_Driver(object):
         servo_msg = Servo_Command()
         servo_msg.header.stamp = now
         servo_msg.header.frame_id = 'global'
-        servo_msg.steer = data[3]
-        servo_msg.throttle = data[4]
+        servo_msg.steer = int(data[3])
+        servo_msg.throttle = int(data[4])
         self.servo_pub.publish(servo_msg)
 
     def clean_shutdown(self):
