@@ -9,6 +9,7 @@ import serial
 from kb_utils.msg import Command
 from kb_utils.msg import Encoder
 from kb_utils.msg import Sonar
+from kb_utils.msg import Servo_Command
 from kb_utils.srv import ResetEncoder
 
 
@@ -21,6 +22,7 @@ class KB_Driver(object):
         self.ser = serial.Serial(port)
         self.enc_pub = rospy.Publisher("encoder", Encoder, queue_size=1)
         self.son_pub = rospy.Publisher("sonar", Sonar, queue_size=1)
+        self.servo_pub = rospy.Publisher("safety_pilot", Servo_Command, queue_size=1)
         self.cmd_sub = rospy.Subscriber("command", Command, self.send_command)
         self.enc_srv = rospy.Service('reset_encoder', ResetEncoder, self.reset_encoder)
 
@@ -47,6 +49,13 @@ class KB_Driver(object):
         son_msg.header.frame_id = 'global'
         son_msg.dist_back = float(data[2])
         self.son_pub.publish(son_msg)
+
+        servo_msg = Servo_Command()
+        servo_msg.header.stamp = now
+        servo_msg.header.frame_id = 'global'
+        servo_msg.steer = data[3]
+        servo_msg.throttle = data[4]
+        self.servo_pub.publish(servo_msg)
 
     def clean_shutdown(self):
         print("\nExiting kb_driver...")
