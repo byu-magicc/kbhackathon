@@ -20,6 +20,7 @@
 #define SAFETY_DEADZONE_MIN 1450
 #define SAFETY_DEADZONE_MAX 1550
 #define SAFETY_DELAY 2000
+#define COMMAND_TIMEOUT 500  //milliseconds
 
 #define MAX_VEL 3.0 //m/s
 
@@ -108,6 +109,7 @@ float dist_back = 0.0f;
 
 float thr = 0.0f;
 float steer = 0.0f;
+long last_command_time;
 
 // loop timing
 long long prevTime;
@@ -297,8 +299,11 @@ void parseCmd(char data) {
         thr = sat(val_str.toFloat(), 1.0f, -1.0f);
         //Serial.println(thr);
         val_str = String("");
+        last_command_time = millis();
         state = s_idle;
       } else {
+        steer = 0.0;
+        thr = 0.0;
         state = s_idle;
       }
       break;
@@ -376,10 +381,16 @@ void loop() {
       throttle.write((rc_thr_copy - 1500)/500.*SERVO_RANGE + 90);
       steering.write((rc_str_copy - 1500)/500.*SERVO_RANGE + 90);
     }
-    digitalWrite(LED_PIN, toggle2);   // set the LED on solid to indicate override
+    digitalWrite(LED_PIN, toggle2);   // set the LED blink to indicate override
     toggle1 = !toggle1;
     if(toggle1) toggle2 = !toggle2;
+    steer = 0.0;
+    thr = 0.0;
   } else {
+    if(millis() - last_command_time > COMMAND_TIMEOUT) {
+      steer = 0.0;
+      thr = 0.0;
+    }
     setServos(steer, thr);
   }
 
