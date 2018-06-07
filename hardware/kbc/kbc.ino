@@ -17,9 +17,10 @@
 #define SERVO_MIN 850
 #define SERVO_MAX 2150
 #define SERVO_RANGE 45    //this limits steering range on the servo so it doesn't bind
-#define SAFETY_DEADZONE_MIN 1450
-#define SAFETY_DEADZONE_MAX 1550
+#define SAFETY_DEADZONE_MIN 1410
+#define SAFETY_DEADZONE_MAX 1590
 #define SAFETY_DELAY 2000
+#define SAFETY_DROPOUT_TIMEOUT 500   //milliseconds
 #define COMMAND_TIMEOUT 500  //milliseconds
 
 #define MAX_VEL 3.0 //m/s
@@ -110,6 +111,7 @@ float dist_back = 0.0f;
 float thr = 0.0f;
 float steer = 0.0f;
 long last_command_time;
+long last_safety_time;
 
 // loop timing
 long long prevTime;
@@ -183,19 +185,29 @@ char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p) {
 bool check_safety_override(int rc_thr, int rc_str) {
   static long override_time = 0;
   long now = millis();
+  bool override = true;
   if(override_time == 0) {
     override_time = now;
   }
-  bool override = true;
+  if(last_safety_time == 0) {
+    last_safety_time = now;
+  }
+  if(rc_thr > SERVO_MIN || rc_thr < SERVO_MAX || 
+     rc_str > SERVO_MIN || rc_str < SERVO_MAX) {
+    last_safety_time = millis();
+  
+  
   // if no safety pilot connected or if input from pilot
   // or if we have received input recently
-  if(rc_thr == 0 || rc_str == 0 ||
-     rc_thr < SAFETY_DEADZONE_MIN || rc_thr > SAFETY_DEADZONE_MAX ||
-     rc_str < SAFETY_DEADZONE_MIN || rc_str > SAFETY_DEADZONE_MAX) {
-    override_time = now;
-  } else if(now - override_time > SAFETY_DELAY) {
-    override = false;
-  }
+    if(rc_thr == 0 || rc_str == 0 ||
+       rc_thr < SAFETY_DEADZONE_MIN || rc_thr > SAFETY_DEADZONE_MAX ||
+       rc_str < SAFETY_DEADZONE_MIN || rc_str > SAFETY_DEADZONE_MAX) {
+      override_time = now;
+    } 
+ }
+ if(now - override_time > SAFETY_DELAY) {
+      override = false;
+ } 
   return override;
 }
 
@@ -373,11 +385,8 @@ void loop() {
   // else pass through pilot commands and don't go back to normal until
   // no input for a couple seconds
   if(check_safety_override(rc_thr_copy, rc_str_copy)) {
-    if(rc_thr_copy < SERVO_MIN || rc_thr_copy > SERVO_MAX || 
-       rc_str_copy < SERVO_MIN || rc_str_copy > SERVO_MAX) {
-      throttle.write(90);
-      steering.write(90);
-    } else {
+    if(rc_thr_copy > SERVO_MIN || rc_thr_copy < SERVO_MAX || 
+       rc_str_copy > SERVO_MIN || rc_str_copy < SERVO_MAX) {
       throttle.write((rc_thr_copy - 1500)/500.*SERVO_RANGE + 90);
       steering.write((rc_str_copy - 1500)/500.*SERVO_RANGE + 90);
     }
@@ -387,7 +396,9 @@ void loop() {
     steer = 0.0;
     thr = 0.0;
   } else {
-    if(millis() - last_command_time > COMMAND_TIMEOUT) {
+    long now = millis();
+    if(now - last_command_time > COMMAND_TIMEOUT ||
+       now - last_safety_time > SAFETY_DROPOUT_TIMEOUT) {
       steer = 0.0;
       thr = 0.0;
     }
