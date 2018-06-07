@@ -35,6 +35,7 @@ volatile int last_str_pwm_rise;
 volatile int str_pwm;
 volatile int last_sonar_pwm_rise;
 volatile int sonar_pwm;
+volatile bool rc_override;
 
 float sat(float val, float max, float min) {
   if(val > max) val = max;
@@ -98,7 +99,7 @@ Encoder enc(PHASE_A, PHASE_B);
 Servo steering;
 Servo throttle;
 
-// Create an IntervalTimer object 
+// Create an IntervalTimer object
 IntervalTimer encTimer;
 
 // a place to store encoder values
@@ -152,13 +153,14 @@ void readEnc() {
 
 // this creates a byte-wise xor checksum to be sent with the
 // data packet for error checking
-char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p) {
+char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p, void* f_p) {
   char chk = 0x00;
   int a = *(int*)a_p;
   int b = *(int*)b_p;
   int c = *(int*)c_p;
   int d = *(int*)d_p;
   int e = *(int*)e_p;
+  int f = *(int*)f_p;
   chk ^= (char)((a & 0xff000000) >> 24);
   chk ^= (char)((a & 0x00ff0000) >> 16);
   chk ^= (char)((a & 0x0000ff00) >>  8);
@@ -179,6 +181,10 @@ char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p) {
   chk ^= (char)((e & 0x00ff0000) >> 16);
   chk ^= (char)((e & 0x0000ff00) >>  8);
   chk ^= (char)(e & 0x000000ff);
+  chk ^= (char)((f & 0xff000000) >> 24);
+  chk ^= (char)((f & 0x00ff0000) >> 16);
+  chk ^= (char)((f & 0x0000ff00) >>  8);
+  chk ^= (char)(f & 0x000000ff);
   return chk;
 }
 
@@ -192,22 +198,22 @@ bool check_safety_override(int rc_thr, int rc_str) {
   if(last_safety_time == 0) {
     last_safety_time = now;
   }
-  if(rc_thr > SERVO_MIN || rc_thr < SERVO_MAX || 
+  if(rc_thr > SERVO_MIN || rc_thr < SERVO_MAX ||
      rc_str > SERVO_MIN || rc_str < SERVO_MAX) {
     last_safety_time = millis();
-  
-  
+
+
   // if no safety pilot connected or if input from pilot
   // or if we have received input recently
     if(rc_thr == 0 || rc_str == 0 ||
        rc_thr < SAFETY_DEADZONE_MIN || rc_thr > SAFETY_DEADZONE_MAX ||
        rc_str < SAFETY_DEADZONE_MIN || rc_str > SAFETY_DEADZONE_MAX) {
       override_time = now;
-    } 
+    }
  }
  if(now - override_time > SAFETY_DELAY) {
       override = false;
- } 
+ }
   return override;
 }
 
@@ -347,9 +353,10 @@ void loop() {
   // convert the pulses into SI units (m and m/s)
   float dist = (float)pos_copy/PULSES_PER_M;
   float vel = (float)diff_copy/PULSES_PER_M*RATE;
-  
+
   // create a checksum by doing a byte-wise xor of the data
-  char checksum = createChecksum(&dist, &vel, &dist_back, &rc_thr_copy, &rc_str_copy);
+  bool rc_override_copy = rc_override;
+  char checksum = createChecksum(&dist, &vel, &dist_back, &rc_thr_copy, &rc_str_copy, &rc_override_copy);
   Serial.print("[");
   Serial.print(dist, 3);
   Serial.print(",");
@@ -360,6 +367,8 @@ void loop() {
   Serial.print(rc_str_copy);
   Serial.print(",");
   Serial.print(rc_thr_copy);
+  Serial.print(",");
+  Serial.print(rc_override_copy ? "1" : "0");
   Serial.print(",");
   if(checksum < 100) Serial.print("0");
   if(checksum < 10) Serial.print("0");
@@ -373,7 +382,7 @@ void loop() {
   } else {
     digitalWrite(LED_PIN, LOW);   // set the LED off
   }
-  
+
   // if a character is sent from the serial monitor,
   // reset both back to zero.
   while (Serial.available()) {
@@ -384,8 +393,9 @@ void loop() {
   // if no input act normal
   // else pass through pilot commands and don't go back to normal until
   // no input for a couple seconds
-  if(check_safety_override(rc_thr_copy, rc_str_copy)) {
-    if(rc_thr_copy > SERVO_MIN || rc_thr_copy < SERVO_MAX || 
+  rc_override = check_safety_override(rc_thr_copy, rc_str_copy);
+  if(rc_override) {
+    if(rc_thr_copy > SERVO_MIN || rc_thr_copy < SERVO_MAX ||
        rc_str_copy > SERVO_MIN || rc_str_copy < SERVO_MAX) {
       throttle.write((rc_thr_copy - 1500)/500.*SERVO_RANGE + 90);
       steering.write((rc_str_copy - 1500)/500.*SERVO_RANGE + 90);
@@ -425,4 +435,3 @@ void loop() {
   }
   prevTime = (long long)micros();
 }
-

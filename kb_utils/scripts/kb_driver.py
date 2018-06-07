@@ -12,6 +12,7 @@ from kb_utils.msg import Sonar
 from kb_utils.msg import Servo_Command
 from kb_utils.srv import ResetEncoder
 
+from std_msgs.msg import Bool
 
 class KB_Driver(object):
 
@@ -23,6 +24,7 @@ class KB_Driver(object):
         self.enc_pub = rospy.Publisher("encoder", Encoder, queue_size=1)
         self.son_pub = rospy.Publisher("sonar", Sonar, queue_size=1)
         self.servo_pub = rospy.Publisher("safety_pilot", Servo_Command, queue_size=1)
+        self.override_pub = rospy.Publisher("safety_pilot_override", Bool, queue_size=1)
         self.cmd_sub = rospy.Subscriber("command", Command, self.send_command)
         self.enc_srv = rospy.Service('reset_encoder', ResetEncoder, self.reset_encoder)
 
@@ -57,6 +59,8 @@ class KB_Driver(object):
         servo_msg.throttle = int(data[4])
         self.servo_pub.publish(servo_msg)
 
+        self.override_pub.publish(data=(data[5] != '0'))
+
     def clean_shutdown(self):
         print("\nExiting kb_driver...")
         return True
@@ -69,7 +73,7 @@ class KB_Driver(object):
                 a = line.index('[')+1
                 b = line.index(']')
                 data = line[a:b].split(',')
-                if len(data) != 6:
+                if len(data) != 7:
                     raise ValueError
                 self.pub_data(data[:-1])
             except ValueError:
