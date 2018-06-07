@@ -20,7 +20,7 @@ class KB_Driver(object):
         """
         Interfaces to the Teensy on the KB car
         """
-        self.ser = serial.Serial(port)
+        self.ser = serial.Serial(port, 115200)
         self.enc_pub = rospy.Publisher("encoder", Encoder, queue_size=1)
         self.son_pub = rospy.Publisher("sonar", Sonar, queue_size=1)
         self.servo_pub = rospy.Publisher("safety_pilot", Servo_Command, queue_size=1)
