@@ -20,7 +20,7 @@
 #define SAFETY_DEADZONE_MIN 1410
 #define SAFETY_DEADZONE_MAX 1590
 #define SAFETY_DELAY 2000
-#define SAFETY_DROPOUT_TIMEOUT 500   //milliseconds
+#define SAFETY_DROPOUT_TIMEOUT 100   //milliseconds
 #define COMMAND_TIMEOUT 500  //milliseconds
 
 #define MAX_VEL 3.0 //m/s
@@ -108,7 +108,7 @@ float dist_back = 0.0f;
 float thr = 0.0f;
 float steer = 0.0f;
 long last_command_time;
-long last_safety_time;
+
 
 // loop timing
 long long prevTime;
@@ -117,7 +117,7 @@ long long prevTime;
 // Choose the UART or USB device to use:
 //   - USB   --> Serial
 //   - UARTx --> Serialx
-auto serial = Serial1;
+auto serial = Serial;
 
 
 void setup() {
@@ -193,30 +193,33 @@ char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p, void*
 
 bool check_safety_override(int rc_thr, int rc_str) {
   static long override_time = 0;
+  static long no_override_time = 0;
   long now = millis();
-  bool override = true;
+  static bool override = true;
   if(override_time == 0) {
     override_time = now;
   }
-  if(last_safety_time == 0) {
-    last_safety_time = now;
+  if(no_override_time == 0) {
+    no_override_time = now;
   }
-  if(rc_thr > SERVO_MIN || rc_thr < SERVO_MAX ||
-     rc_str > SERVO_MIN || rc_str < SERVO_MAX) {
-    last_safety_time = millis();
+
 
 
   // if no safety pilot connected or if input from pilot
   // or if we have received input recently
-    if(rc_thr == 0 || rc_str == 0 ||
-       rc_thr < SAFETY_DEADZONE_MIN || rc_thr > SAFETY_DEADZONE_MAX ||
-       rc_str < SAFETY_DEADZONE_MIN || rc_str > SAFETY_DEADZONE_MAX) {
-      override_time = now;
-    }
- }
- if(now - override_time > SAFETY_DELAY) {
-      override = false;
- }
+  if(rc_thr == 0 || rc_str == 0 ||
+     rc_thr < SAFETY_DEADZONE_MIN || rc_thr > SAFETY_DEADZONE_MAX ||
+     rc_str < SAFETY_DEADZONE_MIN || rc_str > SAFETY_DEADZONE_MAX) {
+    override_time = now;
+  } else {
+    no_override_time = now;
+  }
+  if(now - no_override_time > SAFETY_DROPOUT_TIMEOUT) {
+    override = true;
+  }
+  if(now - override_time > SAFETY_DELAY) {
+    override = false;
+  }
   return override;
 }
 
@@ -237,7 +240,6 @@ void setServos(float steer, float thr) {
         throttle.write(-0.1*90 + 90);
         rev_time = millis();
         state = s_brake;
-        serial.println("brake");
       }
       break;
     case s_brake:
@@ -245,20 +247,17 @@ void setServos(float steer, float thr) {
         throttle.write(90);
         rev_time = millis();
         state = s_wait;
-        serial.println("wait");
       }
       break;
     case s_wait:
       if(millis() - rev_time > BRAKE_DELAY) {
         state = s_rev;
-        serial.println("reverse");
       }
       break;
     case s_rev:
       throttle.write(thr*90 + 90);
       if(thr > 0.0f) {
         state = s_forward;
-        serial.println("forward");
       }
       break;
     default:
@@ -402,6 +401,10 @@ void loop() {
        rc_str_copy > SERVO_MIN || rc_str_copy < SERVO_MAX) {
       throttle.write((rc_thr_copy - 1500)/500.*SERVO_RANGE + 90);
       steering.write((rc_str_copy - 1500)/500.*SERVO_RANGE + 90);
+    } else {
+      steer = 0.0;
+      thr = 0.0;
+      setServos(steer, thr);
     }
     digitalWrite(LED_PIN, toggle2);   // set the LED blink to indicate override
     toggle1 = !toggle1;
@@ -410,8 +413,7 @@ void loop() {
     thr = 0.0;
   } else {
     long now = millis();
-    if(now - last_command_time > COMMAND_TIMEOUT ||
-       now - last_safety_time > SAFETY_DROPOUT_TIMEOUT) {
+    if(now - last_command_time > COMMAND_TIMEOUT) {
       steer = 0.0;
       thr = 0.0;
     }
