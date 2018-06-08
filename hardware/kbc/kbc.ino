@@ -35,6 +35,7 @@ volatile int last_str_pwm_rise;
 volatile int str_pwm;
 volatile int last_sonar_pwm_rise;
 volatile int sonar_pwm;
+volatile bool rc_override;
 
 float sat(float val, float max, float min) {
   if(val > max) val = max;
@@ -83,10 +84,6 @@ void sonar_PWM_isr()
   }
 }
 
-
-// the setup() method runs once, when the sketch starts
-
-
 // Change these pin numbers to the pins connected to your encoder.
 //   Best Performance: both pins have interrupt capability
 //   Good Performance: only the first pin has interrupt capability
@@ -98,7 +95,7 @@ Encoder enc(PHASE_A, PHASE_B);
 Servo steering;
 Servo throttle;
 
-// Create an IntervalTimer object 
+// Create an IntervalTimer object
 IntervalTimer encTimer;
 
 // a place to store encoder values
@@ -117,13 +114,20 @@ long last_safety_time;
 long long prevTime;
 
 
+// Choose the UART or USB device to use:
+//   - USB   --> Serial
+//   - UARTx --> Serialx
+auto serial = Serial1;
+
+
 void setup() {
+  
   // initialize the digital pin as an output.
   pinMode(LED_PIN, OUTPUT);
 //  pinMode(BACK_SONAR_PIN,INPUT);
 //  pinMode(STEER_PIN, OUTPUT);
 //  pinMode(THROTTLE_PIN, OUTPUT);
-  Serial.begin(115200);
+  serial.begin(115200);
   encTimer.begin(readEnc, US_PER_S/RATE);  // Read the encoder at the specified rate
   // assign servo pins
   steering.attach(STEER_PIN);
@@ -152,13 +156,14 @@ void readEnc() {
 
 // this creates a byte-wise xor checksum to be sent with the
 // data packet for error checking
-char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p) {
+char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p, void* f_p) {
   char chk = 0x00;
   int a = *(int*)a_p;
   int b = *(int*)b_p;
   int c = *(int*)c_p;
   int d = *(int*)d_p;
   int e = *(int*)e_p;
+  int f = *(int*)f_p;
   chk ^= (char)((a & 0xff000000) >> 24);
   chk ^= (char)((a & 0x00ff0000) >> 16);
   chk ^= (char)((a & 0x0000ff00) >>  8);
@@ -179,6 +184,10 @@ char createChecksum(void* a_p, void* b_p, void* c_p, void* d_p, void* e_p) {
   chk ^= (char)((e & 0x00ff0000) >> 16);
   chk ^= (char)((e & 0x0000ff00) >>  8);
   chk ^= (char)(e & 0x000000ff);
+  chk ^= (char)((f & 0xff000000) >> 24);
+  chk ^= (char)((f & 0x00ff0000) >> 16);
+  chk ^= (char)((f & 0x0000ff00) >>  8);
+  chk ^= (char)(f & 0x000000ff);
   return chk;
 }
 
@@ -192,22 +201,22 @@ bool check_safety_override(int rc_thr, int rc_str) {
   if(last_safety_time == 0) {
     last_safety_time = now;
   }
-  if(rc_thr > SERVO_MIN || rc_thr < SERVO_MAX || 
+  if(rc_thr > SERVO_MIN || rc_thr < SERVO_MAX ||
      rc_str > SERVO_MIN || rc_str < SERVO_MAX) {
     last_safety_time = millis();
-  
-  
+
+
   // if no safety pilot connected or if input from pilot
   // or if we have received input recently
     if(rc_thr == 0 || rc_str == 0 ||
        rc_thr < SAFETY_DEADZONE_MIN || rc_thr > SAFETY_DEADZONE_MAX ||
        rc_str < SAFETY_DEADZONE_MIN || rc_str > SAFETY_DEADZONE_MAX) {
       override_time = now;
-    } 
+    }
  }
  if(now - override_time > SAFETY_DELAY) {
       override = false;
- } 
+ }
   return override;
 }
 
@@ -228,7 +237,7 @@ void setServos(float steer, float thr) {
         throttle.write(-0.1*90 + 90);
         rev_time = millis();
         state = s_brake;
-        Serial.println("brake");
+        serial.println("brake");
       }
       break;
     case s_brake:
@@ -236,20 +245,20 @@ void setServos(float steer, float thr) {
         throttle.write(90);
         rev_time = millis();
         state = s_wait;
-        Serial.println("wait");
+        serial.println("wait");
       }
       break;
     case s_wait:
       if(millis() - rev_time > BRAKE_DELAY) {
         state = s_rev;
-        Serial.println("reverse");
+        serial.println("reverse");
       }
       break;
     case s_rev:
       throttle.write(thr*90 + 90);
       if(thr > 0.0f) {
         state = s_forward;
-        Serial.println("forward");
+        serial.println("forward");
       }
       break;
     default:
@@ -309,7 +318,7 @@ void parseCmd(char data) {
         val_str += data;
       } else if(data == '>' && val_str.length() > 0) {
         thr = sat(val_str.toFloat(), 1.0f, -1.0f);
-        //Serial.println(thr);
+        //serial.println(thr);
         val_str = String("");
         last_command_time = millis();
         state = s_idle;
@@ -347,45 +356,49 @@ void loop() {
   // convert the pulses into SI units (m and m/s)
   float dist = (float)pos_copy/PULSES_PER_M;
   float vel = (float)diff_copy/PULSES_PER_M*RATE;
-  
+
   // create a checksum by doing a byte-wise xor of the data
-  char checksum = createChecksum(&dist, &vel, &dist_back, &rc_thr_copy, &rc_str_copy);
-  Serial.print("[");
-  Serial.print(dist, 3);
-  Serial.print(",");
-  Serial.print(vel, 3);
-  Serial.print(",");
-  Serial.print(dist_back, 3);
-  Serial.print(",");
-  Serial.print(rc_str_copy);
-  Serial.print(",");
-  Serial.print(rc_thr_copy);
-  Serial.print(",");
-  if(checksum < 100) Serial.print("0");
-  if(checksum < 10) Serial.print("0");
-  Serial.print((int)checksum);
+  bool rc_override_copy = rc_override;
+  char checksum = createChecksum(&dist, &vel, &dist_back, &rc_thr_copy, &rc_str_copy, &rc_override_copy);
+  serial.print("[");
+  serial.print(dist, 3);
+  serial.print(",");
+  serial.print(vel, 3);
+  serial.print(",");
+  serial.print(dist_back, 3);
+  serial.print(",");
+  serial.print(rc_str_copy);
+  serial.print(",");
+  serial.print(rc_thr_copy);
+  serial.print(",");
+  serial.print(rc_override_copy ? "1" : "0");
+  serial.print(",");
+  if(checksum < 100) serial.print("0");
+  if(checksum < 10) serial.print("0");
+  serial.print((int)checksum);
   //printf("%03d", checksum);
-  Serial.print("]");
-  Serial.println();
+  serial.print("]");
+  serial.println();
   //delay(100);
   if(diff_copy != 0) {
     digitalWrite(LED_PIN, HIGH);   // set the LED on
   } else {
     digitalWrite(LED_PIN, LOW);   // set the LED off
   }
-  
+
   // if a character is sent from the serial monitor,
   // reset both back to zero.
-  while (Serial.available()) {
-    parseCmd(Serial.read());
+  while (serial.available()) {
+    parseCmd(serial.read());
   }
 
   // Check for safety pilot input
   // if no input act normal
   // else pass through pilot commands and don't go back to normal until
   // no input for a couple seconds
-  if(check_safety_override(rc_thr_copy, rc_str_copy)) {
-    if(rc_thr_copy > SERVO_MIN || rc_thr_copy < SERVO_MAX || 
+  rc_override = check_safety_override(rc_thr_copy, rc_str_copy);
+  if(rc_override) {
+    if(rc_thr_copy > SERVO_MIN || rc_thr_copy < SERVO_MAX ||
        rc_str_copy > SERVO_MIN || rc_str_copy < SERVO_MAX) {
       throttle.write((rc_thr_copy - 1500)/500.*SERVO_RANGE + 90);
       steering.write((rc_str_copy - 1500)/500.*SERVO_RANGE + 90);
@@ -414,15 +427,14 @@ void loop() {
   // calculate how long all of our stuff took
   long long now = (long long)micros();
   long long dur = now - prevTime;
-  //Serial.print((int)dur);
+  //serial.print((int)dur);
 
   // if the loop took less time than our desired period,
   // sleep until the next iteration should happen
   // this could be more graceful, but I don't care right now
   if(dur > 0 && dur < US_PER_S/RATE) {
     delayMicroseconds(US_PER_S/RATE - dur);
-    //Serial.print("sleeping");
+    //serial.print("sleeping");
   }
   prevTime = (long long)micros();
 }
-
