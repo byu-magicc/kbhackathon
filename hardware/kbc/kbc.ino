@@ -117,7 +117,7 @@ long long prevTime;
 // Choose the UART or USB device to use:
 //   - USB   --> Serial
 //   - UARTx --> Serialx
-auto serial = Serial;
+auto serial = Serial1;
 
 
 void setup() {
